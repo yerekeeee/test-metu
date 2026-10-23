@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Quiz App | Pro</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- html2pdf -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        glass: 'rgba(255, 255, 255, 0.05)',
+                        primary: '#3b82f6',
+                        accent: '#10b981',
+                        dark: '#0f172a'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #064e3b 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: #f8fafc;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-input {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .glass-input:focus {
+            background: rgba(0, 0, 0, 0.5);
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+        .glass-input option { background: #0f172a; }
+
+        .nav-btn { transition: all 0.2s; }
+        .nav-unanswered { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); }
+        .nav-answered { background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #34d399; }
+        .nav-current { background: rgba(59, 130, 246, 0.4); border: 1px solid #3b82f6; box-shadow: 0 0 10px rgba(59,130,246,0.5); transform: scale(1.1); z-index: 10;}
+
+        input[type="radio"] {
+            appearance: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            background-clip: content-box;
+            padding: 3px;
+            transition: all 0.2s;
+        }
+        input[type="radio"]:checked { background-color: #10b981; border-color: #10b981; }
+
+        .hide-view { display: none !important; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade { animation: fadeIn 0.3s ease-out forwards; }
+
+        @media print {
+            body { background: white; color: black; }
+            .glass-panel { background: white; border: 1px solid #ddd; box-shadow: none; filter: none; }
+            .no-print { display: none !important; }
+            .text-white, .text-gray-200, .text-gray-300 { color: #111 !important; }
+            .bg-black\/30 { background: #f3f4f6 !important; }
+            .border-white\/5 { border-color: #e5e7eb !important; }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6 flex flex-col min-h-screen pb-24 md:pb-6">
+
+    <!-- MODAL: PROCTORING WARNING -->
+    <div id="modal-cheat" class="fixed inset-0 z-[100] hide-view flex items-center justify-center bg-black/90 backdrop-blur-md animate-fade px-4">
+        <div class="glass-panel rounded-3xl p-8 max-w-md w-full text-center border-red-500/50 relative overflow-hidden">
+            <div class="absolute inset-0 bg-red-500/10 pointer-events-none"></div>
+            <i class="fas fa-exclamation-triangle text-6xl text-red-500 mb-4 animate-pulse"></i>
+            <h2 class="text-2xl font-bold text-red-400 mb-2">Нарушение прокторинга</h2>
+            <p class="text-gray-300 mb-4 text-sm">Зафиксирована смена вкладки, сворачивание окна или потеря фокуса. Это строго запрещено.</p>
+            <div class="bg-red-900/40 rounded-xl p-4 mb-6 border border-red-500/30">
+                <p class="font-bold text-xl">Штраф: <span id="cheat-counter" class="text-red-400">1</span> / 2</p>
+                <p class="text-xs text-red-300 mt-1">При 3 нарушениях тест будет автоматически завершен с текущим результатом.</p>
+            </div>
+            <button onclick="closeCheatModal()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-red-500/30">Я понял, вернуться к тесту</button>
+        </div>
+    </div>
+
+    <!-- MODAL: CONFIRM ACTION -->
+    <div id="modal-confirm" class="fixed inset-0 z-[100] hide-view flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade px-4">
+        <div class="glass-panel rounded-3xl p-6 max-w-sm w-full text-center">
+            <h3 class="text-xl font-bold mb-4" id="confirm-title">Подтвердите действие</h3>
+            <p class="text-gray-300 mb-6 text-sm" id="confirm-desc">Вы уверены?</p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirmModal(false)" class="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl transition">Отмена</button>
+                <button onclick="closeConfirmModal(true)" id="confirm-btn-yes" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl transition font-bold">Да</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-grow flex items-center justify-center w-full max-w-6xl mx-auto relative h-full">
+
+        <!-- VIEW: LOGIN -->
+        <div id="view-login" class="glass-panel rounded-3xl p-6 md:p-12 w-full max-w-md animate-fade my-auto">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/20 border border-blue-500/30 mb-4 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                    <i class="fas fa-brain text-3xl text-blue-400"></i>
+                </div>
+                <h1 class="text-3xl font-bold tracking-tight">AI Systems Exam</h1>
+                <p class="text-gray-400 mt-2 text-sm">Итоговое тестирование (45 вопросов)</p>
+            </div>
+            
+            <form id="form-login" class="space-y-4">
+                <div>
+                    <input type="text" id="inp-surname" required class="glass-input w-full rounded-xl px-4 py-3.5 placeholder-gray-400" placeholder="Фамилия">
+                </div>
+                <div>
+                    <input type="text" id="inp-name" required class="glass-input w-full rounded-xl px-4 py-3.5 placeholder-gray-400" placeholder="Имя">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="inp-group" required class="glass-input w-full rounded-xl px-4 py-3.5 placeholder-gray-400" placeholder="Группа (CS-211)">
+                    <select id="inp-lang" class="glass-input w-full rounded-xl px-4 py-3.5 appearance-none text-gray-200">
+                        <option value="ru">Русский</option>
+                        <option value="kz">Қазақша</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-4 rounded-xl mt-6 transition shadow-[0_0_20px_rgba(59,130,246,0.3)]">
+                    Начать тестирование <i class="fas fa-arrow-right ml-2 text-sm"></i>
+                </button>
+            </form>
+
+            <div class="mt-8 pt-6 border-t border-white/10 text-center">
+                <button onclick="showAdmin()" class="text-sm text-gray-400 hover:text-white transition flex items-center justify-center w-full gap-2 py-2">
+                    <i class="fas fa-shield-alt"></i> Вход для преподавателя (Админ-панель)
+                </button>
+            </div>
+        </div>
+
+        <!-- VIEW: QUIZ -->
+        <div id="view-quiz" class="hide-view w-full h-full md:h-[85vh] flex flex-col animate-fade">
+            <!-- Header -->
+            <div class="glass-panel rounded-t-3xl md:rounded-3xl p-4 px-6 flex justify-between items-center mb-0 md:mb-4 border-b-0 md:border-b border-white/10 z-10 sticky top-0 bg-[#0f172a]/80 backdrop-blur-xl">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center font-bold text-accent" id="quiz-avatar">С</div>
+                    <div class="hidden sm:block">
+                        <div class="font-bold text-sm leading-tight" id="quiz-student-name">Студент</div>
+                        <div class="text-xs text-gray-400" id="quiz-student-group">Группа</div>
+                    </div>
+                </div>
+                <div class="bg-black/50 rounded-xl px-4 py-2 border border-white/10 flex items-center">
+                    <i class="fas fa-stopwatch text-accent mr-2 animate-pulse"></i>
+                    <span id="quiz-timer" class="text-lg md:text-xl font-mono tracking-widest font-bold text-gray-100">45:00</span>
+                </div>
+            </div>
+
+            <div class="flex-grow flex flex-col md:flex-row gap-4 h-full relative overflow-hidden">
+                <!-- Desktop Sidebar -->
+                <div class="hidden md:flex glass-panel rounded-3xl p-5 w-72 flex-col flex-shrink-0">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex justify-between items-center">
+                        <span>Вопросы</span>
+                        <span id="progress-text-desktop" class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-[10px]">0/45</span>
+                    </h3>
+                    <div class="grid grid-cols-5 gap-2 overflow-y-auto pr-2 custom-scrollbar content-start" id="nav-grid-desktop">
+                        <!-- Buttons injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Main Area -->
+                <div class="glass-panel md:rounded-3xl p-5 md:p-10 flex-grow flex flex-col relative overflow-y-auto w-full mb-16 md:mb-0 pb-20 md:pb-10">
+                    <div class="flex-grow max-w-3xl mx-auto w-full">
+                        <div class="inline-block px-3 py-1 rounded-lg bg-blue-500/10 text-blue-300 text-xs font-bold mb-6 border border-blue-500/20">
+                            Вопрос <span id="q-current-num">1</span> из 45
+                        </div>
+                        
+                        <h2 class="text-xl md:text-2xl font-medium mb-8 leading-relaxed" id="q-text">Текст вопроса...</h2>
+                        
+                        <div id="q-options" class="space-y-3 w-full">
+                            <!-- Options / Inputs injected via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Desktop Controls -->
+                    <div class="hidden md:flex mt-10 pt-6 border-t border-white/10 justify-between items-center max-w-3xl mx-auto w-full">
+                        <button onclick="changeQuestion(-1)" id="btn-prev-desk" class="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white transition disabled:opacity-30 disabled:cursor-not-allowed">
+                            <i class="fas fa-chevron-left mr-2"></i> Назад
+                        </button>
+                        <button onclick="changeQuestion(1)" id="btn-next-desk" class="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-lg shadow-blue-500/20">
+                            Далее <i class="fas fa-chevron-right ml-2"></i>
+                        </button>
+                        <button onclick="reqSubmit()" id="btn-submit-desk" class="hide-view px-8 py-3 rounded-xl bg-accent hover:bg-emerald-400 text-dark font-bold transition shadow-lg shadow-accent/30">
+                            Сдать тест <i class="fas fa-check-double ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mobile Bottom Bar -->
+            <div class="md:hidden fixed bottom-0 left-0 right-0 glass-panel border-t border-white/10 p-3 px-4 flex justify-between items-center z-40 bg-[#0f172a]/90 backdrop-blur-xl">
+                <button onclick="changeQuestion(-1)" id="btn-prev-mob" class="p-3 bg-white/5 rounded-xl disabled:opacity-30 w-12 flex justify-center items-center">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button onclick="toggleMobileNav()" class="flex-grow mx-3 py-3 bg-white/5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border border-white/10">
+                    <i class="fas fa-th"></i> <span id="progress-text-mob">0/45</span>
+                </button>
+                <button onclick="changeQuestion(1)" id="btn-next-mob" class="p-3 bg-blue-600 rounded-xl w-12 flex justify-center items-center shadow-lg shadow-blue-500/30">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+                <button onclick="reqSubmit()" id="btn-submit-mob" class="hide-view p-3 bg-accent text-dark rounded-xl w-12 flex justify-center items-center shadow-lg shadow-accent/30 font-bold">
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
+
+            <!-- Mobile Grid Bottom-Sheet -->
+            <div id="mobile-nav-sheet" class="fixed inset-0 z-50 hide-view bg-black/60 flex flex-col justify-end animate-fade">
+                <div class="h-1/2 w-full" onclick="toggleMobileNav()"></div> <!-- Overlay click to close -->
+                <div class="glass-panel w-full h-1/2 rounded-t-3xl p-5 flex flex-col animate-slide-up bg-[#0f172a]/95 backdrop-blur-2xl">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold">Навигация по тесту</h3>
+                        <button onclick="toggleMobileNav()" class="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="grid grid-cols-5 gap-2 overflow-y-auto pb-6" id="nav-grid-mobile">
+                        <!-- Buttons injected via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: RESULTS -->
+        <div id="view-results" class="hide-view w-full max-w-4xl animate-fade my-auto py-8">
+            <div class="glass-panel rounded-3xl p-6 md:p-10" id="pdf-container">
+                <!-- Result Header -->
+                <div class="text-center mb-8 border-b border-white/10 pb-8">
+                    <div class="inline-flex justify-center items-center w-20 h-20 bg-yellow-500/10 rounded-full mb-4 border border-yellow-500/30 shadow-[0_0_30px_rgba(234,179,8,0.2)]">
+                        <i class="fas fa-award text-4xl text-yellow-400"></i>
+                    </div>
+                    <h1 class="text-3xl font-bold mb-1">Итоги экзамена</h1>
+                    <h2 class="text-xl text-gray-400 mb-6" id="res-name">Студент</h2>
+                    
+                    <div class="flex flex-wrap justify-center gap-4 text-sm">
+                        <div class="bg-black/30 px-4 py-2.5 rounded-xl border border-white/5 flex items-center gap-2">
+                            <i class="fas fa-users text-gray-500"></i> <span id="res-group" class="font-bold">Group</span>
+                        </div>
+                        <div class="bg-black/30 px-4 py-2.5 rounded-xl border border-white/5 flex items-center gap-2">
+                            <i class="fas fa-calendar-alt text-gray-500"></i> <span id="res-date" class="font-bold">Date</span>
+                        </div>
+                        <div class="bg-black/30 px-4 py-2.5 rounded-xl border border-red-500/20 flex items-center gap-2">
+                            <i class="fas fa-exclamation-triangle text-red-500"></i> <span class="text-gray-400">Нарушения:</span> <span id="res-cheat" class="font-bold text-red-400">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Score -->
+                <div class="flex flex-col md:flex-row justify-center items-center gap-8 mb-10">
+                    <div class="relative w-48 h-48 flex items-center justify-center rounded-full bg-black/40 border-[12px] border-gray-700 shadow-inner" id="res-circle">
+                        <div class="text-center z-10">
+                            <div class="text-6xl font-black" id="res-score-num">0%</div>
+                            <div class="text-sm text-gray-400 font-medium mt-2"><span id="res-correct-num">0</span> / 45 верных</div>
+                        </div>
+                    </div>
+                    <div class="text-center md:text-left max-w-sm">
+                        <h3 class="text-3xl font-bold mb-3" id="res-status-text">Статус</h3>
+                        <p class="text-gray-400 leading-relaxed" id="res-status-desc">Описание результата...</p>
+                    </div>
+                </div>
+
+                <!-- Errors -->
+                <div class="mt-8">
+                    <h3 class="text-lg font-bold mb-4 flex items-center"><i class="fas fa-times-circle text-red-400 mr-2"></i> Разбор ошибок</h3>
+                    <div id="res-errors" class="space-y-3 max-h-96 overflow-y-auto pr-2 text-sm custom-scrollbar">
+                        <!-- Errors injected -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex flex-col md:flex-row justify-center gap-4 no-print px-4">
+                <button onclick="downloadPDF()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3.5 rounded-xl font-bold transition flex items-center justify-center gap-2">
+                    <i class="fas fa-file-pdf"></i> Скачать PDF
+                </button>
+                <button onclick="location.reload()" class="bg-white/10 hover:bg-white/20 text-white px-6 py-3.5 rounded-xl font-bold transition">
+                    На главную
+                </button>
+            </div>
+        </div>
+
+        <!-- VIEW: ADMIN -->
+        <div id="view-admin" class="hide-view w-full max-w-6xl animate-fade py-8 h-full flex flex-col">
+            <div class="glass-panel rounded-3xl p-6 flex-grow flex flex-col h-full">
+                <div class="flex flex-wrap justify-between items-center mb-6 gap-4 border-b border-white/10 pb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold flex items-center gap-3"><i class="fas fa-shield-alt text-blue-400"></i> Панель преподавателя</h2>
+                        <p class="text-sm text-gray-400 mt-1">AI Systems Exam Results</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="downloadCSV()" class="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
+                            <i class="fas fa-file-csv"></i> Экспорт CSV
+                        </button>
+                        <button onclick="reqClearDB()" class="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
+                            <i class="fas fa-trash-alt"></i> Очистить БД
+                        </button>
+                        <button onclick="showLogin()" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm transition">
+                            <i class="fas fa-sign-out-alt"></i> Выход
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto rounded-xl border border-white/10 bg-black/20 flex-grow">
+                    <table class="w-full text-sm text-left whitespace-nowrap">
+                        <thead class="text-xs text-gray-400 uppercase bg-black/40 border-b border-white/10">
+                            <tr>
+                                <th class="px-5 py-4">Студент</th>
+                                <th class="px-4 py-4">Группа</th>
+                                <th class="px-4 py-4 text-center">Балл</th>
+                                <th class="px-4 py-4 text-center"><i class="fas fa-exclamation-triangle text-red-400"></i></th>
+                                <th class="px-4 py-4">Дата сдачи</th>
+                                <th class="px-4 py-4 text-right">Детали</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-tbody" class="divide-y divide-white/5">
+                            <!-- Rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: ADMIN DETAILS -->
+        <div id="modal-admin-details" class="fixed inset-0 z-50 hide-view flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade">
+            <div class="glass-panel rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+                <div class="p-5 border-b border-white/10 flex justify-between items-center bg-black/30 rounded-t-2xl">
+                    <h3 class="text-lg font-bold">Детали тестирования</h3>
+                    <button onclick="closeAdminDetails()" class="text-gray-400 hover:text-white w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-6 overflow-y-auto custom-scrollbar" id="admin-details-content">
+                    <!-- Content -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = 'ai-systems-exam-v3';
+        
+        // ВАШИ НАСТРОЙКИ FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyB8gNqX6TwgeDnSb5DF-ErfbXRS0QopkDU",
+            authDomain: "metu-e08b5.firebaseapp.com",
+            projectId: "metu-e08b5",
+            storageBucket: "metu-e08b5.firebasestorage.app",
+            messagingSenderId: "22700638408",
+            appId: "1:22700638408:web:b84bb71f9c23527b7ca5fd",
+            measurementId: "G-1GDYYSCL0L"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        let currentUser = null;
+        let adminDataStore = [];
+
+        // App State
+        const state = {
+            user: { name: '', surname: '', group: '', lang: '' },
+            questions: [], 
+            currentIndex: 0,
+            answers: new Array(45).fill(null), 
+            timeRemaining: 45 * 60,
+            timerId: null,
+            violations: 0,
+            isActive: false,
+        };
+
+        // --- QUESTIONS DATA (Strict 45: 35 Radio, 10 Input) ---
+        const getRawQuestions = () => {
+            const q = [];
+            const addMcq = (text, options, correctIdx) => q.push({ type: 'mcq', text, options, answer: correctIdx });
+            const addInp = (text, answer) => q.push({ type: 'input', text, answer });
+
+            // 1-35: MCQ (AI, ML, Knowledge, Logic, Rules)
+            addMcq("Что является главной целью теста Тьюринга?", ["Проверка скорости ПК", "Оценка способности машины мыслить как человек", "Генерация текста", "Создание роботов"], 1);
+            addMcq("Как расшифровывается аббревиатура ИИ (AI)?", ["Интеллектуальная Информация", "Искусственный Интеллект", "Интегрированный Интерфейс", "Итеративный Инструмент"], 1);
+            addMcq("Какое направление НЕ является частью ИИ?", ["Машинное обучение", "Компьютерное зрение", "Сборка ПК", "Обработка естественного языка"], 2);
+            addMcq("В чем отличие глубокого обучения (DL) от классического машинного (ML)?", ["DL не использует данные", "DL базируется на многослойных нейросетях", "ML работает только с текстом", "DL было создано в 1950-х"], 1);
+            addMcq("Генеративный ИИ в первую очередь нацелен на:", ["Сортировку массивов", "Создание нового контента", "Управление базами данных", "Решение уравнений"], 1);
+            addMcq("Какой язык де-факто является стандартом в ИИ?", ["C++", "Java", "Python", "Ruby"], 2);
+            addMcq("Что такое 'Обучающая выборка' (Train set)?", ["Данные для проверки", "Набор данных, на котором алгоритм находит закономерности", "Случайный набор чисел", "Результат алгоритма"], 1);
+            addMcq("Кто считается одним из 'отцов' ИИ?", ["Билл Гейтс", "Джон Маккарти", "Стив Джобс", "Линус Торвальдс"], 1);
+            addMcq("Слабый ИИ (Narrow AI) - это:", ["ИИ, который часто ошибается", "ИИ, решающий конкретную задачу", "ИИ с сознанием", "Программа без библиотек"], 1);
+            addMcq("Сильный ИИ (AGI) - это:", ["Суперкомпьютер", "ИИ, способный решать любые задачи на уровне человека", "Алгоритм шахмат", "Нейросеть для генерации"], 1);
+            addMcq("Чем 'Знания' отличаются от 'Данных'?", ["Занимают меньше памяти", "Знания — это данные, наделенные контекстом и связями", "Данные всегда числовые", "Ничем"], 1);
+            addMcq("Декларативное представление знаний описывает:", ["Как сделать", "Что есть (факты и отношения)", "Когда сделать", "Для чего сделать"], 1);
+            addMcq("Процедурное представление знаний описывает:", ["Алгоритмы и инструкции", "Статические факты", "Логику предикатов", "Таблицы"], 0);
+            addMcq("Экстенсионал понятия - это:", ["Его свойства", "Множество конкретных объектов, подходящих под понятие", "Имя", "Сложность"], 1);
+            addMcq("Интенсионал понятия - это:", ["Список объектов", "Внутреннее содержание, признаки", "Переменная", "Ссылка"], 1);
+            addMcq("Какой метод использует граф с вершинами-понятиями и ребрами-отношениями?", ["Таблица", "Продукционные правила", "Семантическая сеть", "Массив"], 2);
+            addMcq("Фрейм - это:", ["Кадр видео", "Структура для описания стереотипной ситуации", "Цикл", "Формат"], 1);
+            addMcq("Слот во фрейме используется для:", ["Хранения значения или свойства", "Удаления", "Связи с интернетом", "Генерации чисел"], 0);
+            addMcq("Какое отношение обозначает наследование класса?", ["HAS-A", "IS-A", "PART-OF", "LIKES"], 1);
+            addMcq("Модель на правилах 'ЕСЛИ... ТО...' называется:", ["Фреймовой", "Логической", "Продукционной", "Сетевой"], 2);
+            addMcq("Экспертная система предназначена для:", ["Замены ОС", "Решения задач в узкой предметной области на уровне эксперта", "Обучения нейросетей", "Создания сайтов"], 1);
+            addMcq("Основной компонент Экспертной Системы?", ["Монитор и клавиатура", "База знаний и механизм вывода", "База SQL", "Браузер"], 1);
+            addMcq("Computer Vision решает задачи:", ["Перевода текста", "Распознавания объектов на фото", "Синтеза речи", "Оптимизации БД"], 1);
+            addMcq("NLP занимается:", ["Обработкой изображений", "Обработкой естественного языка", "Настройкой сетей", "Программированием роботов"], 1);
+            addMcq("Задача классификации - это:", ["Предсказание числа", "Разделение объектов на заданные классы", "Группировка без меток", "Сжатие"], 1);
+            addMcq("Задача регрессии - это:", ["Предсказание непрерывной величины (напр. цены)", "Классификация на 2 класса", "Поиск аномалий", "Генерация текста"], 0);
+            addMcq("Алгоритм обучения без учителя?", ["Дерево решений", "Линейная регрессия", "K-means (кластеризация)", "Метод опорных векторов"], 2);
+            addMcq("В медицине ИИ чаще всего используют для:", ["Анализа снимков (CV)", "Продажи лекарств", "Ремонта", "Управления персоналом"], 0);
+            addMcq("Машинный перевод - это задача:", ["Computer Vision", "Reinforcement Learning", "NLP", "Robotics"], 2);
+            addMcq("Логика высказываний оперирует:", ["Переменными и кванторами", "Утверждениями (True/False) и связками", "Вероятностями", "Нечеткими множествами"], 1);
+            addMcq("Логика предикатов отличается тем, что в ней есть:", ["Только константы", "Переменные, свойства и кванторы", "Веса", "Циклы"], 1);
+            addMcq("Символ ∀ означает:", ["Существует хотя бы один", "Квантор всеобщности (Для всех)", "Принадлежит", "Не равно"], 1);
+            addMcq("Символ ∃ означает:", ["Квантор существования (Существует)", "Сумма", "Интеграл", "Для всех"], 0);
+            addMcq("Нечеткая логика (Fuzzy) позволяет:", ["Использовать только 0 и 1", "Описывать степень истинности [0, 1]", "Удалять данные", "Избегать багов"], 1);
+            addMcq("Прямой вывод добавит факт 'С' если:", ["Известно только 'А'", "Известны 'А' и 'В' для правила 'ЕСЛИ А и В ТО С'", "Цель 'С'", "Нет правила"], 1);
+
+            // 36-45: Input (Strictly text matching, case-insensitive)
+            addInp("Как называется процесс автоматического поиска скрытых закономерностей в данных (Data ...)?", "mining");
+            addInp("Напишите встроенную функцию Python, которая реализует квантор всеобщности (возвращает True, только если все элементы истинны).", "all");
+            addInp("Напишите встроенную функцию Python, которая реализует квантор существования (возвращает True, если хотя бы один элемент истинен).", "any");
+            addInp("Как называется часть продукционного правила (ЕСЛИ ...), описывающая условие?", "антецедент");
+            addInp("Как называется часть продукционного правила (... ТО), описывающая действие/следствие?", "консеквент");
+            addInp("Как называется механизм вывода, идущий от известных фактов к новым целям? (Ответ из 2 слов, на русском)", "прямой вывод");
+            addInp("Как называется механизм вывода, идущий от поставленной цели к подтверждающим фактам? (Ответ из 2 слов, на русском)", "обратный вывод");
+            addInp("В Python для хранения уникальных фактов в рабочей памяти лучше всего подходит структура данных:", "set");
+            addInp("Напишите метод множества (set) в Python для проверки, является ли одно множество подмножеством другого (A.____(B)).", "issubset");
+            addInp("Напишите метод множества (set) в Python для добавления новых элементов из другого множества в текущее (факты.____(новые_факты)).", "update");
+
+            return q;
+        };
+
+        // Utility: Shuffle Array
+        function shuffleArray(array) {
+            let curId = array.length;
+            while (0 !== curId) {
+                let randId = Math.floor(Math.random() * curId);
+                curId -= 1;
+                let tmp = array[curId];
+                array[curId] = array[randId];
+                array[randId] = tmp;
+            }
+            return array;
+        }
+
+        // --- INIT ---
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await signInAnonymously(auth);
+                currentUser = auth.currentUser;
+            } catch(e) { console.error("Auth init failed:", e); }
+
+            document.getElementById('form-login').addEventListener('submit', (e) => {
+                e.preventDefault();
+                state.user.surname = document.getElementById('inp-surname').value.trim();
+                state.user.name = document.getElementById('inp-name').value.trim();
+                state.user.group = document.getElementById('inp-group').value.trim();
+                state.user.lang = document.getElementById('inp-lang').value;
+                startQuiz();
+            });
+
+            setupProctoring();
+            
+            // Clean up admin view if reload
+            document.getElementById('view-admin').classList.add('hide-view');
+        });
+
+        // --- ADMIN VIEW (No hash, explicit function) ---
+        window.showAdmin = () => {
+            const pwd = prompt("Введите пароль доступа:");
+            if(pwd === "admin") { // Пароль для входа в админку
+                hideAll();
+                document.getElementById('view-admin').classList.remove('hide-view');
+                if (currentUser) loadAdminData();
+            } else {
+                alert("Неверный пароль."); 
+            }
+        };
+        window.showLogin = () => { hideAll(); document.getElementById('view-login').classList.remove('hide-view'); };
+
+        function hideAll() {
+            ['view-login', 'view-quiz', 'view-results', 'view-admin'].forEach(id => {
+                document.getElementById(id).classList.add('hide-view');
+            });
+        }
+
+        // --- QUIZ LOGIC ---
+        function startQuiz() {
+            hideAll();
+            document.getElementById('view-quiz').classList.remove('hide-view');
+            
+            // Format UI
+            document.getElementById('quiz-student-name').textContent = `${state.user.surname} ${state.user.name}`;
+            document.getElementById('quiz-student-group').textContent = state.user.group;
+            document.getElementById('quiz-avatar').textContent = state.user.surname.charAt(0).toUpperCase();
+
+            // Prepare questions (Shuffle)
+            const raw = getRawQuestions();
+            state.questions = shuffleArray(raw.map((q, idx) => ({...q, originalIdx: idx})));
+            
+            state.isActive = true;
+            state.answers.fill(null);
+            state.currentIndex = 0;
+            state.timeRemaining = 45 * 60;
+            state.violations = 0;
+
+            buildNavigator();
+            renderQuestion();
+            startTimer();
+        }
+
+        function buildNavigator() {
+            const gridDesk = document.getElementById('nav-grid-desktop');
+            const gridMob = document.getElementById('nav-grid-mobile');
+            gridDesk.innerHTML = ''; gridMob.innerHTML = '';
+            
+            for (let i = 0; i < state.questions.length; i++) {
+                const btnD = document.createElement('button');
+                const btnM = document.createElement('button');
+                const cls = `nav-btn w-full aspect-square rounded-lg flex items-center justify-center text-sm font-medium ${getNavClass(i)}`;
+                
+                btnD.className = cls; btnM.className = cls;
+                btnD.textContent = i + 1; btnM.textContent = i + 1;
+                btnD.id = `nav-btn-d-${i}`; btnM.id = `nav-btn-m-${i}`;
+                
+                const handler = () => { if (state.isActive) { state.currentIndex = i; renderQuestion(); toggleMobileNav(false); } };
+                btnD.onclick = handler; btnM.onclick = handler;
+                
+                gridDesk.appendChild(btnD);
+                gridMob.appendChild(btnM);
+            }
+            updateProgress();
+        }
+
+        function getNavClass(index) {
+            if (index === state.currentIndex) return 'nav-current';
+            if (state.answers[index] !== null && state.answers[index] !== '') return 'nav-answered';
+            return 'nav-unanswered';
+        }
+
+        function updateNavigator() {
+            for (let i = 0; i < state.questions.length; i++) {
+                const bd = document.getElementById(`nav-btn-d-${i}`);
+                const bm = document.getElementById(`nav-btn-m-${i}`);
+                const cls = `nav-btn w-full aspect-square rounded-lg flex items-center justify-center text-sm font-medium ${getNavClass(i)}`;
+                if(bd) bd.className = cls;
+                if(bm) bm.className = cls;
+            }
+            updateProgress();
+        }
+
+        function updateProgress() {
+            const answered = state.answers.filter(a => a !== null && a !== '').length;
+            const txt = `${answered}/${state.questions.length}`;
+            document.getElementById('progress-text-desktop').textContent = txt;
+            document.getElementById('progress-text-mob').textContent = txt;
+        }
+
+        window.toggleMobileNav = (forceState) => {
+            const sheet = document.getElementById('mobile-nav-sheet');
+            if(forceState === false) sheet.classList.add('hide-view');
+            else if(forceState === true) sheet.classList.remove('hide-view');
+            else sheet.classList.toggle('hide-view');
+        }
+
+        window.renderQuestion = () => {
+            const q = state.questions[state.currentIndex];
+            document.getElementById('q-current-num').textContent = state.currentIndex + 1;
+            document.getElementById('q-text').textContent = q.text;
+            
+            const optionsContainer = document.getElementById('q-options');
+            optionsContainer.innerHTML = '';
+
+            if (q.type === 'mcq') {
+                q.options.forEach((opt, idx) => {
+                    const isChecked = state.answers[state.currentIndex] === idx;
+                    const label = document.createElement('label');
+                    label.className = `flex items-start md:items-center p-4 rounded-xl border transition cursor-pointer mb-3 ${isChecked ? 'bg-accent/20 border-accent/50' : 'bg-black/20 border-white/5 hover:bg-white/5'}`;
+                    
+                    label.innerHTML = `
+                        <input type="radio" name="q-group" value="${idx}" ${isChecked ? 'checked' : ''} class="mr-4 mt-1 md:mt-0 flex-shrink-0">
+                        <span class="text-gray-200 text-sm md:text-base leading-snug">${opt}</span>
+                    `;
+                    
+                    label.querySelector('input').addEventListener('change', (e) => {
+                        state.answers[state.currentIndex] = parseInt(e.target.value);
+                        updateNavigator();
+                        renderQuestion();
+                    });
+                    
+                    optionsContainer.appendChild(label);
+                });
+            } else if (q.type === 'input') {
+                const val = state.answers[state.currentIndex] || '';
+                optionsContainer.innerHTML = `
+                    <div class="mt-4 bg-black/40 border border-white/10 rounded-2xl p-6 shadow-inner relative">
+                        <div class="absolute top-3 right-4 text-xs text-gray-500 font-mono">_input</div>
+                        <input type="text" id="code-input" value="${val}" 
+                            class="glass-input w-full rounded-xl px-4 py-4 font-mono text-accent text-lg" 
+                            autocomplete="off" spellcheck="false" placeholder="Введите ваш ответ...">
+                    </div>
+                `;
+                const inp = document.getElementById('code-input');
+                inp.focus();
+                inp.addEventListener('input', (e) => {
+                    state.answers[state.currentIndex] = e.target.value;
+                    updateNavigator();
+                });
+            }
+
+            const isFirst = state.currentIndex === 0;
+            const isLast = state.currentIndex === state.questions.length - 1;
+            
+            ['desk', 'mob'].forEach(pfx => {
+                document.getElementById(`btn-prev-${pfx}`).disabled = isFirst;
+                if(isLast) {
+                    document.getElementById(`btn-next-${pfx}`).classList.add('hide-view');
+                    document.getElementById(`btn-submit-${pfx}`).classList.remove('hide-view');
+                } else {
+                    document.getElementById(`btn-next-${pfx}`).classList.remove('hide-view');
+                    document.getElementById(`btn-submit-${pfx}`).classList.add('hide-view');
+                }
+            });
+            
+            updateNavigator(); 
+        };
+
+        window.changeQuestion = (dir) => {
+            const newIdx = state.currentIndex + dir;
+            if (newIdx >= 0 && newIdx < state.questions.length) {
+                state.currentIndex = newIdx;
+                renderQuestion();
+            }
+        };
+
+        function startTimer() {
+            clearInterval(state.timerId);
+            const el = document.getElementById('quiz-timer');
+            state.timerId = setInterval(() => {
+                state.timeRemaining--;
+                if (state.timeRemaining <= 0) {
+                    clearInterval(state.timerId);
+                    processSubmit(true);
+                    return;
+                }
+                const m = Math.floor(state.timeRemaining / 60).toString().padStart(2, '0');
+                const s = (state.timeRemaining % 60).toString().padStart(2, '0');
+                el.textContent = `${m}:${s}`;
+                
+                if (state.timeRemaining < 300) el.classList.replace('text-gray-100', 'text-red-500');
+            }, 1000);
+        }
+
+        // --- PROCTORING ---
+        function setupProctoring() {
+            document.addEventListener('contextmenu', e => { if(state.isActive) e.preventDefault(); });
+            document.addEventListener('copy', e => { if(state.isActive) e.preventDefault(); });
+            document.addEventListener('keydown', e => {
+                if(!state.isActive) return;
+                if(e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) e.preventDefault();
+            });
+
+            window.addEventListener('blur', () => { if(state.isActive) triggerViolation(); });
+            document.addEventListener('visibilitychange', () => { if (state.isActive && document.visibilityState === 'hidden') triggerViolation(); });
+        }
+
+        function triggerViolation() {
+            if(!document.getElementById('modal-cheat').classList.contains('hide-view')) return;
+            
+            state.violations++;
+            if (state.violations >= 3) {
+                processSubmit(true);
+            } else {
+                document.getElementById('cheat-counter').textContent = state.violations;
+                document.getElementById('modal-cheat').classList.remove('hide-view');
+            }
+        }
+
+        window.closeCheatModal = () => { document.getElementById('modal-cheat').classList.add('hide-view'); };
+
+        // --- MODAL CONFIRM ---
+        let confirmAction = null;
+        window.showConfirm = (title, desc, action) => {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-desc').textContent = desc;
+            confirmAction = action;
+            document.getElementById('modal-confirm').classList.remove('hide-view');
+        }
+        window.closeConfirmModal = (res) => {
+            document.getElementById('modal-confirm').classList.add('hide-view');
+            if(res && confirmAction) confirmAction();
+            confirmAction = null;
+        }
+
+        // --- SUBMIT ---
+        window.reqSubmit = () => {
+            const unanswered = state.answers.filter(a => a === null || a === '').length;
+            let msg = "Вы уверены, что хотите завершить тест?";
+            if (unanswered > 0) msg = `У вас осталось ${unanswered} неотвеченных вопросов. Завершить принудительно?`;
+            
+            showConfirm("Завершение", msg, () => processSubmit(false));
+        };
+
+        async function processSubmit(forced = false) {
+            state.isActive = false;
+            clearInterval(state.timerId);
+            hideAll();
+            
+            document.getElementById('modal-cheat').classList.add('hide-view');
+            document.getElementById('view-results').classList.remove('hide-view');
+
+            let correct = 0;
+            const errors = [];
+            const resultsToSave = [];
+
+            state.questions.forEach((q, i) => {
+                const uAns = state.answers[i];
+                let isCorrect = false;
+                let uStr = "Нет ответа";
+                let cStr = "";
+
+                if (q.type === 'mcq') {
+                    cStr = q.options[q.answer];
+                    if (uAns !== null && uAns !== undefined) {
+                        uStr = q.options[uAns];
+                        if (uAns === q.answer) isCorrect = true;
+                    }
+                } else if (q.type === 'input') {
+                    cStr = q.answer;
+                    if (uAns !== null && uAns !== '') {
+                        uStr = uAns.trim();
+                        if (uStr.toLowerCase() === q.answer.toLowerCase()) isCorrect = true;
+                    }
+                }
+
+                resultsToSave.push({ qNum: i+1, isCorrect, uAns: uStr, qText: q.text });
+
+                if (isCorrect) correct++;
+                else errors.push({ qNum: i+1, qText: q.text, user: uStr, correct: cStr });
+            });
+
+            const totalQ = state.questions.length;
+            const scorePercent = Math.round((correct / totalQ) * 100);
+            
+            // UI
+            document.getElementById('res-name').textContent = `${state.user.surname} ${state.user.name}`;
+            document.getElementById('res-group').textContent = state.user.group;
+            document.getElementById('res-date').textContent = new Date().toLocaleDateString();
+            document.getElementById('res-cheat').textContent = state.violations;
+            
+            const circle = document.getElementById('res-circle');
+            document.getElementById('res-score-num').textContent = `${scorePercent}`;
+            document.getElementById('res-correct-num').textContent = correct;
+            
+            const statusText = document.getElementById('res-status-text');
+            const statusDesc = document.getElementById('res-status-desc');
+            
+            circle.classList.remove('border-gray-700', 'text-emerald-400', 'text-blue-400', 'text-yellow-400', 'text-red-500', 'border-emerald-500', 'border-blue-400', 'border-yellow-400', 'border-red-500');
+            if (scorePercent >= 90) { circle.classList.add('border-emerald-500', 'text-emerald-400'); statusText.textContent = "Отлично"; statusText.className = "text-3xl font-bold mb-3 text-emerald-400"; statusDesc.textContent = "Превосходный результат!"; }
+            else if (scorePercent >= 70) { circle.classList.add('border-blue-400', 'text-blue-400'); statusText.textContent = "Хорошо"; statusText.className = "text-3xl font-bold mb-3 text-blue-400"; statusDesc.textContent = "Уверенные базовые знания."; }
+            else if (scorePercent >= 50) { circle.classList.add('border-yellow-400', 'text-yellow-400'); statusText.textContent = "Удовлетворительно"; statusText.className = "text-3xl font-bold mb-3 text-yellow-400"; statusDesc.textContent = "Необходимо повторить материал."; }
+            else { circle.classList.add('border-red-500', 'text-red-500'); statusText.textContent = "Неудовлетворительно"; statusText.className = "text-3xl font-bold mb-3 text-red-500"; statusDesc.textContent = "Тест не пройден."; }
+
+            const errContainer = document.getElementById('res-errors');
+            errContainer.innerHTML = '';
+            if (errors.length === 0) {
+                errContainer.innerHTML = '<p class="text-emerald-400 p-4 bg-emerald-500/10 rounded-xl font-medium">Ни одной ошибки. Блестяще!</p>';
+            } else {
+                errors.forEach(e => {
+                    errContainer.innerHTML += `
+                        <div class="bg-white/5 p-4 rounded-xl border border-white/10 mb-3">
+                            <p class="font-medium text-gray-200 mb-3 leading-snug"><span class="text-gray-500 font-mono mr-2">#${e.qNum}</span> ${e.qText}</p>
+                            <div class="flex flex-col sm:flex-row gap-3">
+                                <div class="flex-1 bg-red-500/10 p-3 rounded-lg border border-red-500/20">
+                                    <span class="block text-[10px] uppercase tracking-wider text-red-400 mb-1">Ваш ответ</span>
+                                    <span class="text-gray-300 font-medium">${e.user}</span>
+                                </div>
+                                <div class="flex-1 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
+                                    <span class="block text-[10px] uppercase tracking-wider text-emerald-400 mb-1">Правильный</span>
+                                    <span class="text-gray-300 font-medium">${e.correct}</span>
+                                </div>
+                            </div>
+                        </div>`;
+                });
+            }
+
+            // Firestore
+            if (currentUser) {
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'), {
+                        uid: currentUser.uid,
+                        surname: state.user.surname,
+                        name: state.user.name,
+                        group: state.user.group,
+                        lang: state.user.lang,
+                        score: scorePercent,
+                        correctCount: correct,
+                        violations: state.violations,
+                        timestamp: new Date().toISOString(),
+                        details: resultsToSave
+                    });
+                } catch(err) { console.error("Save error:", err); }
+            }
+        }
+
+        window.downloadPDF = () => {
+            const el = document.getElementById('pdf-container');
+            const opt = {
+                margin: 10,
+                filename: `AI_Result_${state.user.surname}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            
+            const origBg = el.style.background;
+            el.style.background = 'white';
+            el.style.color = 'black';
+            document.getElementById('res-errors').classList.remove('max-h-96', 'overflow-y-auto'); 
+            
+            html2pdf().set(opt).from(el).save().then(() => {
+                el.style.background = origBg;
+                el.style.color = '';
+                document.getElementById('res-errors').classList.add('max-h-96', 'overflow-y-auto');
+            });
+        };
+
+        // --- ADMIN FEATURES ---
+        window.loadAdminData = async () => {
+            if (!currentUser) return;
+            const tbody = document.getElementById('admin-tbody');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10"><i class="fas fa-spinner fa-spin text-2xl text-blue-400 mb-2"></i><br><span class="text-gray-400">Загрузка...</span></td></tr>';
+            
+            try {
+                const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'));
+                adminDataStore = [];
+                snapshot.forEach(d => adminDataStore.push({ id: d.id, ...d.data() }));
+                
+                adminDataStore.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                renderAdminTable();
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-red-400">Ошибка загрузки. Убедитесь что в Firestore Rules стоит allow read, write: if true;</td></tr>';
+            }
+        };
+
+        function renderAdminTable() {
+            const tbody = document.getElementById('admin-tbody');
+            tbody.innerHTML = '';
+            
+            if (adminDataStore.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-gray-400">Нет данных</td></tr>';
+                return;
+            }
+
+            adminDataStore.forEach((row, i) => {
+                const dateStr = new Date(row.timestamp).toLocaleString();
+                const scoreColor = row.score >= 90 ? 'text-emerald-400' : (row.score >= 50 ? 'text-yellow-400' : 'text-red-400');
+                const vColor = row.violations > 0 ? 'text-red-400 font-bold bg-red-500/10 px-2 py-1 rounded' : 'text-gray-500';
+                
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition border-b border-white/5 last:border-0";
+                tr.innerHTML = `
+                    <td class="px-5 py-4 font-bold text-gray-200">${row.surname} ${row.name}</td>
+                    <td class="px-4 py-4 text-gray-400 text-sm">${row.group} <span class="text-[10px] bg-white/10 px-1 rounded ml-1">${row.lang}</span></td>
+                    <td class="px-4 py-4 text-center font-black ${scoreColor}">${row.score}</td>
+                    <td class="px-4 py-4 text-center"><span class="${vColor}">${row.violations}</span></td>
+                    <td class="px-4 py-4 text-xs text-gray-500">${dateStr}</td>
+                    <td class="px-4 py-4 text-right">
+                        <button onclick="showAdminDetails(${i})" class="bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 px-4 py-2 rounded-lg text-xs transition">Просмотр</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.showAdminDetails = (index) => {
+            const data = adminDataStore[index];
+            const content = document.getElementById('admin-details-content');
+            
+            let html = `
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                    <div class="bg-white/5 p-3 rounded-xl col-span-2">
+                        <p class="text-[10px] text-gray-400 uppercase">Студент</p>
+                        <p class="font-bold text-white">${data.surname} ${data.name}</p>
+                        <p class="text-xs text-gray-400">${data.group} | ${data.lang}</p>
+                    </div>
+                    <div class="bg-white/5 p-3 rounded-xl">
+                        <p class="text-[10px] text-gray-400 uppercase">Балл</p>
+                        <p class="font-bold text-xl ${data.score >= 50 ? 'text-emerald-400' : 'text-red-400'}">${data.score}</p>
+                    </div>
+                    <div class="bg-white/5 p-3 rounded-xl">
+                        <p class="text-[10px] text-gray-400 uppercase">Штрафы</p>
+                        <p class="font-bold text-xl ${data.violations > 0 ? 'text-red-400' : 'text-emerald-400'}">${data.violations}</p>
+                    </div>
+                </div>
+                <h4 class="font-bold text-sm text-gray-400 mb-3 uppercase tracking-wider">Ответы (${data.details?.length || 0}):</h4>
+                <div class="space-y-2">
+            `;
+
+            if(data.details) {
+                data.details.forEach(e => {
+                    const icon = e.isCorrect ? '<i class="fas fa-check text-emerald-400 w-4"></i>' : '<i class="fas fa-times text-red-400 w-4"></i>';
+                    html += `
+                        <div class="bg-black/20 p-3 rounded-lg flex gap-3 items-start border border-white/5">
+                            <div class="mt-1">${icon}</div>
+                            <div>
+                                <p class="text-xs text-gray-300 mb-1">Q${e.qNum}: ${e.qText}</p>
+                                <p class="text-xs font-bold ${e.isCorrect ? 'text-emerald-400' : 'text-red-400'}">${e.uAns}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else { html += '<p class="text-gray-500">Нет детализации.</p>'; }
+            
+            html += `</div>`;
+            content.innerHTML = html;
+            document.getElementById('modal-admin-details').classList.remove('hide-view');
+        };
+
+        window.closeAdminDetails = () => { document.getElementById('modal-admin-details').classList.add('hide-view'); };
+
+        // Export & Delete
+        window.downloadCSV = () => {
+            if(adminDataStore.length === 0) return;
+            const headers = ["Фамилия", "Имя", "Группа", "Язык", "Балл", "Правильно", "Нарушения", "Дата"];
+            const rows = adminDataStore.map(r => [
+                r.surname, r.name, r.group, r.lang, r.score, r.correctCount, r.violations, new Date(r.timestamp).toLocaleString()
+            ]);
+            
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "AI_Exam_Results.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        window.reqClearDB = () => {
+            showConfirm("Очистка БД", "Удалить все результаты тестирования безвозвратно?", async () => {
+                try {
+                    const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'submissions'));
+                    const promises = [];
+                    snap.forEach(d => {
+                        promises.push(deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', d.id)));
+                    });
+                    await Promise.all(promises);
+                    loadAdminData();
+                } catch(e) { console.error("Error clearing DB:", e); }
+            });
+        };
+
+    </script>
+</body>
+</html>
