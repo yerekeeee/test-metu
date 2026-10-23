@@ -131,8 +131,9 @@
         <!-- VIEW: LOGIN -->
         <div id="view-login" class="glass-panel rounded-3xl p-6 md:p-12 w-full max-w-md animate-fade my-auto">
             <div class="text-center mb-8">
-                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/20 border border-blue-500/30 mb-4 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-                    <i class="fas fa-brain text-3xl text-blue-400"></i>
+                <!-- НЕВИДИМАЯ КНОПКА АДМИНА: Клик по мозгу -->
+                <div onclick="showAdmin()" class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-500/20 border border-blue-500/30 mb-4 shadow-[0_0_15px_rgba(59,130,246,0.5)] cursor-default">
+                    <i class="fas fa-brain text-3xl text-blue-400 pointer-events-none"></i>
                 </div>
                 <h1 class="text-3xl font-bold tracking-tight">AI Systems Exam</h1>
                 <p class="text-gray-400 mt-2 text-sm">Итоговое тестирование (45 вопросов)</p>
@@ -158,12 +159,6 @@
                     Начать тестирование <i class="fas fa-arrow-right ml-2 text-sm"></i>
                 </button>
             </form>
-
-            <div class="mt-8 pt-6 border-t border-white/10 text-center">
-                <button onclick="showAdmin()" class="text-sm text-gray-400 hover:text-white transition flex items-center justify-center w-full gap-2 py-2">
-                    <i class="fas fa-shield-alt"></i> Вход для преподавателя (Админ-панель)
-                </button>
-            </div>
         </div>
 
         <!-- VIEW: QUIZ -->
@@ -242,7 +237,7 @@
 
             <!-- Mobile Grid Bottom-Sheet -->
             <div id="mobile-nav-sheet" class="fixed inset-0 z-50 hide-view bg-black/60 flex flex-col justify-end animate-fade">
-                <div class="h-1/2 w-full" onclick="toggleMobileNav()"></div> <!-- Overlay click to close -->
+                <div class="h-1/2 w-full" onclick="toggleMobileNav()"></div>
                 <div class="glass-panel w-full h-1/2 rounded-t-3xl p-5 flex flex-col animate-slide-up bg-[#0f172a]/95 backdrop-blur-2xl">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="font-bold">Навигация по тесту</h3>
@@ -339,7 +334,7 @@
                             <tr>
                                 <th class="px-5 py-4">Студент</th>
                                 <th class="px-4 py-4">Группа</th>
-                                <th class="px-4 py-4 text-center">Балл</th>
+                                <th class="px-4 py-4 text-center">Балл (редакт.)</th>
                                 <th class="px-4 py-4 text-center"><i class="fas fa-exclamation-triangle text-red-400"></i></th>
                                 <th class="px-4 py-4">Дата сдачи</th>
                                 <th class="px-4 py-4 text-right">Детали</th>
@@ -372,7 +367,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // IMPORT updateDoc FOR CHANGING SCORES
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const appId = 'ai-systems-exam-v3';
         
@@ -406,13 +402,12 @@
             isActive: false,
         };
 
-        // --- QUESTIONS DATA (Strict 45: 35 Radio, 10 Input) ---
+        // --- QUESTIONS DATA ---
         const getRawQuestions = () => {
             const q = [];
             const addMcq = (text, options, correctIdx) => q.push({ type: 'mcq', text, options, answer: correctIdx });
             const addInp = (text, answer) => q.push({ type: 'input', text, answer });
 
-            // 1-35: MCQ (AI, ML, Knowledge, Logic, Rules)
             addMcq("Что является главной целью теста Тьюринга?", ["Проверка скорости ПК", "Оценка способности машины мыслить как человек", "Генерация текста", "Создание роботов"], 1);
             addMcq("Как расшифровывается аббревиатура ИИ (AI)?", ["Интеллектуальная Информация", "Искусственный Интеллект", "Интегрированный Интерфейс", "Итеративный Инструмент"], 1);
             addMcq("Какое направление НЕ является частью ИИ?", ["Машинное обучение", "Компьютерное зрение", "Сборка ПК", "Обработка естественного языка"], 2);
@@ -449,7 +444,6 @@
             addMcq("Нечеткая логика (Fuzzy) позволяет:", ["Использовать только 0 и 1", "Описывать степень истинности [0, 1]", "Удалять данные", "Избегать багов"], 1);
             addMcq("Прямой вывод добавит факт 'С' если:", ["Известно только 'А'", "Известны 'А' и 'В' для правила 'ЕСЛИ А и В ТО С'", "Цель 'С'", "Нет правила"], 1);
 
-            // 36-45: Input (Strictly text matching, case-insensitive)
             addInp("Как называется процесс автоматического поиска скрытых закономерностей в данных (Data ...)?", "mining");
             addInp("Напишите встроенную функцию Python, которая реализует квантор всеобщности (возвращает True, только если все элементы истинны).", "all");
             addInp("Напишите встроенную функцию Python, которая реализует квантор существования (возвращает True, если хотя бы один элемент истинен).", "any");
@@ -464,7 +458,6 @@
             return q;
         };
 
-        // Utility: Shuffle Array
         function shuffleArray(array) {
             let curId = array.length;
             while (0 !== curId) {
@@ -494,19 +487,17 @@
             });
 
             setupProctoring();
-            
-            // Clean up admin view if reload
             document.getElementById('view-admin').classList.add('hide-view');
         });
 
-        // --- ADMIN VIEW (No hash, explicit function) ---
+        // --- ADMIN VIEW ---
         window.showAdmin = () => {
-            const pwd = prompt("Введите пароль доступа:");
-            if(pwd === "admin") { // Пароль для входа в админку
+            const pwd = prompt("Введите пароль доступа (панель преподавателя):");
+            if(pwd === "@n240Petrushka") { // <-- ПАРОЛЬ ИЗМЕНЕН ЗДЕСЬ
                 hideAll();
                 document.getElementById('view-admin').classList.remove('hide-view');
                 if (currentUser) loadAdminData();
-            } else {
+            } else if (pwd !== null) {
                 alert("Неверный пароль."); 
             }
         };
@@ -523,12 +514,10 @@
             hideAll();
             document.getElementById('view-quiz').classList.remove('hide-view');
             
-            // Format UI
             document.getElementById('quiz-student-name').textContent = `${state.user.surname} ${state.user.name}`;
             document.getElementById('quiz-student-group').textContent = state.user.group;
             document.getElementById('quiz-avatar').textContent = state.user.surname.charAt(0).toUpperCase();
 
-            // Prepare questions (Shuffle)
             const raw = getRawQuestions();
             state.questions = shuffleArray(raw.map((q, idx) => ({...q, originalIdx: idx})));
             
@@ -893,10 +882,15 @@
                 
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-white/5 transition border-b border-white/5 last:border-0";
+                
+                // Кнопка редактирования балла
                 tr.innerHTML = `
                     <td class="px-5 py-4 font-bold text-gray-200">${row.surname} ${row.name}</td>
                     <td class="px-4 py-4 text-gray-400 text-sm">${row.group} <span class="text-[10px] bg-white/10 px-1 rounded ml-1">${row.lang}</span></td>
-                    <td class="px-4 py-4 text-center font-black ${scoreColor}">${row.score}</td>
+                    <td class="px-4 py-4 text-center font-black ${scoreColor}">
+                        <span class="mr-2">${row.score}</span>
+                        <button onclick="editScore(${i})" class="text-gray-500 hover:text-white transition" title="Изменить балл"><i class="fas fa-pencil-alt"></i></button>
+                    </td>
                     <td class="px-4 py-4 text-center"><span class="${vColor}">${row.violations}</span></td>
                     <td class="px-4 py-4 text-xs text-gray-500">${dateStr}</td>
                     <td class="px-4 py-4 text-right">
@@ -906,6 +900,29 @@
                 tbody.appendChild(tr);
             });
         }
+
+        // РУЧНОЕ РЕДАКТИРОВАНИЕ БАЛЛА
+        window.editScore = async (index) => {
+            const data = adminDataStore[index];
+            const newScoreStr = prompt(`Студент: ${data.surname} ${data.name}\nТекущий балл: ${data.score}\nВведите новый балл (от 0 до 100):`, data.score);
+            
+            if (newScoreStr === null || newScoreStr.trim() === '') return;
+            
+            const newScore = parseInt(newScoreStr);
+            if (isNaN(newScore) || newScore < 0 || newScore > 100) {
+                alert("Ошибка: Пожалуйста, введите корректное число от 0 до 100.");
+                return;
+            }
+            
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'submissions', data.id);
+                await updateDoc(docRef, { score: newScore });
+                loadAdminData(); // Перезагружаем таблицу
+            } catch(e) {
+                console.error("Error updating score:", e);
+                alert("Произошла ошибка при обновлении балла.");
+            }
+        };
 
         window.showAdminDetails = (index) => {
             const data = adminDataStore[index];
